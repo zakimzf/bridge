@@ -1,0 +1,44 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "contracts/BridgeBase.sol": {
+      "content": "// SPDX-License-Identifier: MIT\r\npragma solidity >=0.6.0 <0.8.0;\r\n\r\nimport \"./IToken.sol\";\r\n\r\ncontract BridgeBase {\r\n    address public owner;\r\n    IToken public token;\r\n    mapping(address => mapping(uint256 => bool)) public processedNonces;\r\n    mapping(address => uint256) public maxProcessedNonce;\r\n\r\n    enum Step {\r\n        Burn,\r\n        Mint\r\n    }\r\n\r\n    event Transfer(\r\n        address from,\r\n        address to,\r\n        uint256 amount,\r\n        uint256 date,\r\n        uint256 nonce,\r\n        bytes signature,\r\n        Step indexed step\r\n    );\r\n\r\n    constructor(address _token) {\r\n        owner = msg.sender;\r\n        token = IToken(_token);\r\n    }\r\n\r\n    function burn(\r\n        address to,\r\n        uint256 amount,\r\n        uint256 nonce,\r\n        bytes calldata signature\r\n    ) external {\r\n        require(\r\n            processedNonces[msg.sender][nonce] == false,\r\n            \"TRANSFER_ALREADY_PROCESSED\"\r\n        );\r\n        processedNonces[msg.sender][nonce] = true;\r\n        if (nonce > maxProcessedNonce[msg.sender]) {\r\n            maxProcessedNonce[msg.sender] = nonce;\r\n        }\r\n        token.burn(msg.sender, amount);\r\n        emit Transfer(\r\n            msg.sender,\r\n            to,\r\n            amount,\r\n            block.timestamp,\r\n            nonce,\r\n            signature,\r\n            Step.Burn\r\n        );\r\n    }\r\n\r\n    function mint(\r\n        address from,\r\n        address to,\r\n        uint256 amount,\r\n        uint256 nonce,\r\n        bytes calldata signature\r\n    ) external {\r\n        bytes32 message = prefixed(\r\n            keccak256(abi.encodePacked(from, to, amount, nonce))\r\n        );\r\n        require(recoverSigner(message, signature) == from, \"WRONG_SIGNATURE\");\r\n        require(\r\n            processedNonces[from][nonce] == false,\r\n            \"TRANSFER_ALREADY_PROCESSED\"\r\n        );\r\n        processedNonces[from][nonce] = true;\r\n        if (nonce > maxProcessedNonce[from]) {\r\n            maxProcessedNonce[from] = nonce;\r\n        }\r\n        token.mint(to, amount);\r\n        emit Transfer(\r\n            from,\r\n            to,\r\n            amount,\r\n            block.timestamp,\r\n            nonce,\r\n            signature,\r\n            Step.Mint\r\n        );\r\n    }\r\n\r\n    function prefixed(bytes32 hash) internal pure returns (bytes32) {\r\n        return\r\n            keccak256(\r\n                abi.encodePacked(\"\\x19Ethereum Signed Message:\\n32\", hash)\r\n            );\r\n    }\r\n\r\n    function recoverSigner(bytes32 message, bytes memory sig)\r\n        internal\r\n        pure\r\n        returns (address)\r\n    {\r\n        uint8 v;\r\n        bytes32 r;\r\n        bytes32 s;\r\n\r\n        (v, r, s) = splitSignature(sig);\r\n\r\n        return ecrecover(message, v, r, s);\r\n    }\r\n\r\n    function splitSignature(bytes memory sig)\r\n        internal\r\n        pure\r\n        returns (\r\n            uint8,\r\n            bytes32,\r\n            bytes32\r\n        )\r\n    {\r\n        require(sig.length == 65);\r\n\r\n        bytes32 r;\r\n        bytes32 s;\r\n        uint8 v;\r\n\r\n        assembly {\r\n            // first 32 bytes, after the length prefix\r\n            r := mload(add(sig, 32))\r\n            // second 32 bytes\r\n            s := mload(add(sig, 64))\r\n            // final byte (first byte of the next 32 bytes)\r\n            v := byte(0, mload(add(sig, 96)))\r\n        }\r\n\r\n        return (v, r, s);\r\n    }\r\n}\r\n"
+    },
+    "contracts/IToken.sol": {
+      "content": "// SPDX-License-Identifier: MIT\r\npragma solidity >=0.6.0 <0.8.0;\r\n\r\ninterface IToken {\r\n    function mint(address account, uint256 amount) external;\r\n\r\n    function burn(address account, uint256 amount) external;\r\n}\r\n"
+    },
+    "contracts/BridgeETH.sol": {
+      "content": "// SPDX-License-Identifier: MIT\r\npragma solidity >=0.6.0 <0.8.0;\r\n\r\nimport \"./BridgeBase.sol\";\r\n\r\ncontract BridgeETH is BridgeBase {\r\n    constructor(address token) BridgeBase(token) {}\r\n}\r\n"
+    },
+    "contracts/BridgeBSC.sol": {
+      "content": "// SPDX-License-Identifier: MIT\r\npragma solidity >=0.6.0 <0.8.0;\r\n\r\nimport \"./BridgeBase.sol\";\r\n\r\ncontract BridgeBSC is BridgeBase {\r\n    constructor(address token) BridgeBase(token) {}\r\n}\r\n"
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": true,
+      "runs": 200
+    },
+    "outputSelection": {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode",
+          "evm.deployedBytecode",
+          "evm.methodIdentifiers",
+          "metadata",
+          "devdoc",
+          "userdoc",
+          "storageLayout",
+          "evm.gasEstimates"
+        ],
+        "": [
+          "ast"
+        ]
+      }
+    },
+    "metadata": {
+      "useLiteralContent": true
+    }
+  }
+}
